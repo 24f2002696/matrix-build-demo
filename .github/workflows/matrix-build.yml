@@ -1,0 +1,106 @@
+name: Multi-Platform Matrix Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  matrix-build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [16, 18, 20]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: matrix-15f1563
+        run: |
+          echo "Building for ${{ matrix.platform }} with Node.js ${{ matrix.node-version }}"
+          echo "OS: ${{ matrix.os }}"
+          echo "Timestamp: $(date)"
+      
+      - name: Install dependencies
+        run: |
+          node --version
+          npm --version
+      
+      - name: Generate build artifact
+        run: |
+          mkdir -p build
+          node -e "console.log(JSON.stringify({platform: '${{ matrix.platform }}', node: '${{ matrix.node-version }}', os: '${{ matrix.os }}', timestamp: new Date().toISOString(), build: 'success'}, null, 2))" > build/build-info.json
+          echo "Build completed for ${{ matrix.platform }}-node${{ matrix.node-version }}" > build/output.txt
+          echo "====================================" >> build/output.txt
+          echo "Platform: ${{ matrix.platform }}" >> build/output.txt
+          echo "Node Version: ${{ matrix.node-version }}" >> build/output.txt
+          echo "OS: ${{ matrix.os }}" >> build/output.txt
+          echo "====================================" >> build/output.txt
+        shell: bash
+      
+      - name: Create sample application
+        run: |
+          echo "console.log('Hello from ${{ matrix.platform }} - Node ${{ matrix.node-version }}');" > build/app.js
+          node build/app.js
+        shell: bash
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-15f1563-${{ matrix.platform }}-node${{ matrix.node-version }}
+          path: build/
+          retention-days: 30
+      
+      - name: Display artifact info
+        run: |
+          echo "Artifact uploaded: build-15f1563-${{ matrix.platform }}-node${{ matrix.node-version }}"
+          ls -la build/
+        shell: bash
+  
+  aggregate-results:
+    needs: matrix-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+      
+      - name: List all artifacts
+        run: |
+          echo "All build artifacts:"
+          ls -R all-artifacts/
+      
+      - name: Create summary report
+        run: |
+          echo "# Matrix Build Summary" > summary.md
+          echo "" >> summary.md
+          echo "Total artifacts: $(ls all-artifacts/ | wc -l)" >> summary.md
+          echo "" >> summary.md
+          echo "## Artifacts:" >> summary.md
+          for dir in all-artifacts/*/; do
+            echo "- $(basename $dir)" >> summary.md
+          done
+          cat summary.md
+      
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-15f1563-summary
+          path: summary.md
